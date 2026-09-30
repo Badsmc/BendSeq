@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>BendSeq</name>
+  <description>SheetMetal Sequence Generation and Simulation for FreeCAD.</description>
+  <version>1.0.0</version>
+  <date>2026-09-30</date>
+  <maintainer email="badsmc@github.com">Badsmc</maintainer>
+  <license file="LICENSE">LGPL-2.1-only</license>
+  <url type="repository" branch="main">https://github.com/Badsmc/BendSeq</url>
+  <url type="readme">https://github.com/Badsmc/BendSeq/blob/main/README.md</url>
+  
+  <content>
+    <workbench>
+      <classname>BendSeqWorkbench</classname>
+      <subdirectory>./</subdirectory>
+    </workbench>
+  </content>
+</package>
