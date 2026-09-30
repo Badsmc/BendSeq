@@ -18,3 +18,4 @@ class FoldResult:
     shape: Optional[Any] = None
     error: Optional[str] = None
     engine: Optional[str] = None
+    transform_info: Optional[Any] = None

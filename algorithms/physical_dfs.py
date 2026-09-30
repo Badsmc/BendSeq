@@ -20,11 +20,11 @@ class PhysicalOracle:
             return None
             
         new_shape = result.shape
-        errors = self.collision_engine.check_all(new_shape, self.tooling)
+        errors = self.collision_engine.check_all(new_shape, getattr(self, "tooling", {}))
         if errors:
             return None
             
-        return new_shape
+        return result
 
 def search(initial_state: SequenceState, all_bends: List[BendSpec], oracle: PhysicalOracle, config: dict) -> Optional[List[str]]:
     """
@@ -37,7 +37,7 @@ def search(initial_state: SequenceState, all_bends: List[BendSpec], oracle: Phys
     dead_states = set()
     bends_by_id = {b.id: b for b in all_bends}
     
-    def dfs(state: SequenceState) -> Optional[List[str]]:
+    def dfs(state: SequenceState, current_specs: dict) -> Optional[List[str]]:
         if time.time() - start_time > budget:
             return None
             
@@ -47,11 +47,27 @@ def search(initial_state: SequenceState, all_bends: List[BendSpec], oracle: Phys
         if state.key in dead_states:
             return None
             
-        candidates = filter_candidates_backward(state, [bends_by_id[bid] for bid in state.bends_remaining])
+        candidates = filter_candidates_backward(state, [current_specs[bid] for bid in state.bends_remaining])
         
         for bend in candidates:
-            new_shape = oracle.try_unbend(state, bend)
-            if new_shape:
+            result = oracle.try_unbend(state, bend)
+            if result:
+                new_shape = result.shape
+                t_info = getattr(result, "transform_info", None)
+                
+                next_specs = {}
+                from ..core.geometry.transform import compute_force_ids, transform_bend_spec_inplace, clone_spec
+                force_ids = compute_force_ids(bend, [s for s in current_specs.values() if s.id != bend.id])
+                
+                for bid, spec in current_specs.items():
+                    if bid == bend.id: continue
+                    cloned = clone_spec(spec)
+                    if t_info and bid in force_ids:
+                        placement = t_info.get("placement")
+                        if placement:
+                            transform_bend_spec_inplace(cloned, placement)
+                    next_specs[bid] = cloned
+                
                 next_bends_remaining = set(state.bends_remaining)
                 next_bends_remaining.remove(bend.id)
                 next_bends_done = set(state.bends_done)
@@ -67,11 +83,11 @@ def search(initial_state: SequenceState, all_bends: List[BendSpec], oracle: Phys
                     cost=state.cost
                 )
                 
-                result = dfs(next_state)
-                if result:
-                    return result
+                res = dfs(next_state, next_specs)
+                if res:
+                    return res
                     
         dead_states.add(state.key)
         return None
         
-    return dfs(initial_state)
+    return dfs(initial_state, bends_by_id)

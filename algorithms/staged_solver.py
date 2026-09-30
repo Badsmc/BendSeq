@@ -36,6 +36,34 @@ def solve(initial_shape: Any, bends: List[BendSpec], config: Dict[str, Any]) -> 
     collision_engine = CollisionEngine(config.get("collision_margin", 0.1))
     oracle = physical_dfs.PhysicalOracle(fold_engine, collision_engine)
     
+    tooling = config.get("tooling", {})
+    if tooling:
+        import os
+        from ..tooling.library import ToolLibrary
+        lib_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ToolLibrary")
+        if not os.path.exists(lib_dir):
+            lib_dir = "/Users/badmc/Desktop/BendSeq/ToolLibrary"
+        lib = ToolLibrary(lib_dir)
+        
+        punch_shape = None
+        die_shape = None
+        
+        punch_name = tooling.get("punch")
+        if punch_name:
+            for p in lib.data.get("punches", []):
+                if p.get("name") == punch_name or p.get("id") == punch_name:
+                    punch_shape = lib.get_tool_shape("punches", p.get("id"))
+                    break
+                    
+        die_name = tooling.get("die")
+        if die_name:
+            for d in lib.data.get("dies", []):
+                if d.get("name") == die_name or d.get("id") == die_name:
+                    die_shape = lib.get_tool_shape("dies", d.get("id"))
+                    break
+                    
+        oracle.tooling = {"punch": punch_shape, "die": die_shape}
+    
     order = physical_dfs.search(state, bends, oracle, config)
     if order:
         return {"success": True, "order": order, "partial": False, "stats": stats, "diagnostics": diagnostics}

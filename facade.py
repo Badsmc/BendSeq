@@ -36,9 +36,35 @@ def find_sequence(doc_selection_or_body, *, strategy="staged", time_budget=None,
 
 def validate_sequence(body, order, **kwargs) -> Dict[str, Any]:
     """
-    Validates a given sequence.
+    Validates a given sequence physically by attempting to unbend in reverse.
     Returns: dict with success (bool), error (str), stats (dict).
     """
+    from .algorithms.physical_dfs import PhysicalOracle
+    from .core.engines.fold_engine import FoldEngine
+    from .core.engines.collision_engine import CollisionEngine
+    from .core.models.sequence_state import SequenceState
+    
+    config = dict(SEQUENCE_CONFIG)
+    oracle = PhysicalOracle(FoldEngine(config), CollisionEngine(config.get("collision_margin", 0.1)))
+    
+    bends = freecad_adapter.extract_bends(body)
+    bends_by_id = {b.id: b for b in bends}
+    
+    try:
+        current_shape = body.Shape.copy()
+    except Exception:
+        return {"success": False, "error": "Invalid body shape"}
+        
+    for bend_id in reversed(order):
+        if bend_id not in bends_by_id:
+            return {"success": False, "error": f"Unknown bend ID: {bend_id}"}
+        bend = bends_by_id[bend_id]
+        state = SequenceState(current_shape=current_shape, bends_done=frozenset(), bends_remaining=set(), order=[])
+        res = oracle.try_unbend(state, bend)
+        if not res:
+            return {"success": False, "error": f"Validation failed at bend {bend_id}"}
+        current_shape = res.shape
+        
     return {"success": True, "error": "", "stats": {}}
 
 def prepare_simulation(body, order):

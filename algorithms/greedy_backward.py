@@ -18,11 +18,14 @@ def search(initial_state: SequenceState, all_bends: List[BendSpec], config: dict
         if not candidates:
             return None # Dead end
             
+        prev_bend_obj = bends_by_id[state.order[0]] if state.order else None
+        
         # Sort candidates by lowest penalty cost
-        candidates.sort(key=lambda b: calculate_step_cost(state, b, config))
+        candidates.sort(key=lambda b: calculate_step_cost(state, b, prev_bend_obj, config))
         
         # Pick best
         best_bend = candidates[0]
+        step_cost = calculate_step_cost(state, best_bend, prev_bend_obj, config)
         
         next_bends_remaining = set(state.bends_remaining)
         next_bends_remaining.remove(best_bend.id)
@@ -36,7 +39,7 @@ def search(initial_state: SequenceState, all_bends: List[BendSpec], config: dict
             bends_done=frozenset(next_bends_done),
             bends_remaining=next_bends_remaining,
             order=next_order,
-            cost=state.cost + calculate_step_cost(state, best_bend, config)
+            cost=state.cost + step_cost
         )
         
     return state.order

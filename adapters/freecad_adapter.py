@@ -22,9 +22,25 @@ def extract_body_and_base_face(doc_selection) -> Tuple[Optional[Any], Optional[s
         
     return obj, face_name
 
+def _extract_edge_points(feature) -> Tuple[Optional[FreeCAD.Vector], Optional[FreeCAD.Vector]]:
+    try:
+        bo = getattr(feature, "baseObject", None)
+        if not bo: return None, None
+        parent, subs = bo[0], list(bo[1])
+        if not parent or not subs: return None, None
+        edge = parent.Shape.getElement(subs[0])
+        if not edge or getattr(edge, "ShapeType", "") != "Edge": return None, None
+        import Part
+        v = edge.Vertexes
+        if len(v) >= 2:
+            return v[0].Point, v[-1].Point
+    except Exception:
+        pass
+    return None, None
+
 def extract_bends(body: Any) -> List[BendSpec]:
     """
-    Finds SheetMetal bend features related to the body.
+    Finds SheetMetal bend features related to the body and fully populates BendSpec.
     """
     bends = []
     import FreeCAD
@@ -32,26 +48,20 @@ def extract_bends(body: Any) -> List[BendSpec]:
     if not doc:
         return bends
         
-    # We will search all objects in the document that have SheetMetal bend-like properties
-    # and are geometrically part of this part (or just grab all SM features for now).
     for feature in doc.Objects:
-        # Check if it's a SheetMetal feature
         is_sm = False
         if hasattr(feature, "Proxy") and feature.Proxy is not None:
             cname = feature.Proxy.__class__.__name__
             if "Bend" in cname or "Fold" in cname or "Wall" in cname:
                 is_sm = True
                 
-        # Also check standard properties
         if not is_sm and hasattr(feature, "angle") and hasattr(feature, "radius"):
-            # Could be a standard FreeCAD feature acting as a bend
             if "SheetMetal" in str(getattr(feature, "Proxy", "")):
                 is_sm = True
                 
         if is_sm:
             try:
                 angle = getattr(feature, 'angle', 90.0)
-                # Some features use an object or expression for angle, so we float it if possible
                 if hasattr(angle, "Value"): angle = angle.Value
                 else: angle = float(angle)
                 
@@ -63,7 +73,19 @@ def extract_bends(body: Any) -> List[BendSpec]:
                 if hasattr(k_factor, "Value"): k_factor = k_factor.Value
                 else: k_factor = float(k_factor)
                 
-                p1, p2 = FreeCAD.Vector(), FreeCAD.Vector()
+                invert = bool(getattr(feature, "invert", False))
+                bend_sign = -1 if invert else 1
+                direction = "down" if invert else "up"
+                
+                p1, p2 = _extract_edge_points(feature)
+                if not p1 or not p2:
+                    p1, p2 = FreeCAD.Vector(), FreeCAD.Vector()
+                    
+                center = (p1 + p2) * 0.5
+                axis = p2 - p1
+                length = axis.Length
+                if length > 1e-9:
+                    axis.normalize()
                 
                 spec = BendSpec(
                     id=feature.Name,
@@ -72,7 +94,14 @@ def extract_bends(body: Any) -> List[BendSpec]:
                     k_factor=k_factor,
                     line_p1=p1,
                     line_p2=p2,
-                    sheetmetal_feature=feature
+                    center=center,
+                    axis=axis,
+                    length=length,
+                    direction=direction,
+                    bend_sign=bend_sign,
+                    invert=invert,
+                    sheetmetal_feature=feature,
+                    metadata={"source": "feature", "invert": invert}
                 )
                 bends.append(spec)
             except Exception as e:
